@@ -3,6 +3,7 @@
 Unified Image Generation Tool
 
 Dispatches to the appropriate backend based on explicit provider configuration.
+Supports comma-separated backend chains for automatic failover.
 
 Backend selection (`IMAGE_BACKEND` in `.env` or the current process environment):
   IMAGE_BACKEND=gemini      -> Gemini backend (google-genai SDK)
@@ -23,6 +24,10 @@ Backend selection (`IMAGE_BACKEND` in `.env` or the current process environment)
   IMAGE_BACKEND=opencli-gemini  -> OpenCLI Gemini Web (browser, no API key)
   IMAGE_BACKEND=opencli-chatgpt -> OpenCLI ChatGPT Web (browser, no API key)
 
+Failover chain (comma-separated, tried in order until one succeeds):
+  IMAGE_BACKEND=openai,gemini,qwen
+  IMAGE_BACKEND=opencli-chatgpt,opencli-gemini
+
 Configuration source (process env wins, `.env` is the fallback layer):
   1. Current process environment variables
   2. The first `.env` found among:
@@ -32,7 +37,7 @@ Configuration source (process env wins, `.env` is the fallback layer):
      - `~/.ppt-master/.env` (user-level config)
 
 Supported keys:
-  IMAGE_BACKEND    (required) backend name
+  IMAGE_BACKEND    (required) backend name, or comma-separated chain for failover
 
   Provider-specific keys are used for credentials and overrides, for example:
     GEMINI_API_KEY / GEMINI_MODEL / GEMINI_BASE_URL
@@ -364,8 +369,91 @@ def _resolve_backend() -> tuple[object, str]:
         "Example:\n"
         "  IMAGE_BACKEND=openai\n"
         "  OPENAI_API_KEY=sk-xxx\n"
+        "\n"
+        "Multiple backends with failover (comma-separated, tried in order):\n"
+        "  IMAGE_BACKEND=openai,gemini,qwen\n"
     )
     sys.exit(1)
+
+
+def _resolve_backend_chain() -> list[tuple[object, str]]:
+    """
+    Resolve a comma-separated IMAGE_BACKEND into an ordered list of backends.
+
+    Returns:
+        List of (backend_module, canonical_name) tuples.
+        Skips backends whose required imports fail, with a warning.
+    """
+    raw = os.environ.get("IMAGE_BACKEND", "").strip()
+    if not raw:
+        _resolve_backend()
+
+    names = [n.strip().lower() for n in raw.split(",") if n.strip()]
+    if not names:
+        _resolve_backend()
+
+    chain: list[tuple[object, str]] = []
+    seen: set[str] = set()
+    for name in names:
+        canonical = BACKEND_ALIASES.get(name)
+        if not canonical:
+            supported = ", ".join(SUPPORTED_BACKENDS)
+            print(f"Warning: Unknown backend '{name}' in chain, skipping. Supported: {supported}")
+            continue
+        if canonical in seen:
+            continue
+        seen.add(canonical)
+        try:
+            module, cname = _load_backend(canonical)
+            chain.append((module, cname))
+        except SystemExit:
+            print(f"Warning: Backend '{canonical}' unavailable (missing dependency), skipping.")
+            continue
+
+    if not chain:
+        print("Error: No valid backends in IMAGE_BACKEND chain.")
+        sys.exit(1)
+
+    return chain
+
+
+def generate_with_fallback(
+    chain: list[tuple[object, str]],
+    *,
+    prompt: str,
+    aspect_ratio: str = "1:1",
+    image_size: str = "1K",
+    output_dir: str = None,
+    filename: str = None,
+    model: str = None,
+) -> str:
+    """
+    Try each backend in order; return on first success.
+
+    Raises RuntimeError with all failure reasons if every backend fails.
+    """
+    errors: list[str] = []
+    for backend_module, backend_name in chain:
+        try:
+            print(f"  [FALLBACK] Trying backend: {backend_name}")
+            return backend_module.generate(
+                prompt=prompt,
+                aspect_ratio=aspect_ratio,
+                image_size=image_size,
+                output_dir=output_dir,
+                filename=filename,
+                model=model,
+            )
+        except Exception as exc:
+            err_msg = f"{backend_name}: {exc}"
+            errors.append(err_msg)
+            print(f"  [FALLBACK] {backend_name} failed: {exc}")
+            if len(chain) > 1:
+                print(f"  [FALLBACK] Trying next backend...")
+            continue
+
+    details = "\n  ".join(errors)
+    raise RuntimeError(f"All backends failed:\n  {details}")
 
 
 DEFAULT_MANIFEST_CONCURRENCY = 3
@@ -453,12 +541,12 @@ def save_manifest(path: str, data: dict) -> None:
         raise
 
 
-def _run_manifest(manifest: dict, manifest_path: str, backend_module, *,
+def _run_manifest(manifest: dict, manifest_path: str, backend_chain: list[tuple[object, str]], *,
                   initial_concurrency: int,
                   image_size: str,
                   output_dir: str,
                   model: str | None) -> tuple[int, int, int]:
-    """Run Pending/Failed items through the backend with adaptive concurrency.
+    """Run Pending/Failed items through the backend chain with adaptive concurrency.
 
     Strategy:
       - Start at `initial_concurrency` workers per batch.
@@ -469,6 +557,7 @@ def _run_manifest(manifest: dict, manifest_path: str, backend_module, *,
       - Status is written back to the manifest file after each completion;
         a Ctrl-C in the middle still preserves done items.
       - `Needs-Manual` items are skipped (user processes them externally).
+      - Each item tries all backends in chain order (failover).
 
     Returns (ok_count, failed_count, skipped_count).
     """
@@ -488,9 +577,11 @@ def _run_manifest(manifest: dict, manifest_path: str, backend_module, *,
         )
         return 0, 0, skipped
 
+    chain_labels = ", ".join(name for _, name in backend_chain)
     print(
         f"\n[Manifest] {total} item(s) to generate, "
         f"{skipped} already done. concurrency={initial_concurrency}\n"
+        f"  Backend chain: {chain_labels}\n"
     )
 
     queue: list[int] = list(pending_idx)
@@ -502,7 +593,8 @@ def _run_manifest(manifest: dict, manifest_path: str, backend_module, *,
     def _one(idx: int):
         item = items[idx]
         try:
-            saved_path = backend_module.generate(
+            saved_path = generate_with_fallback(
+                backend_chain,
                 prompt=item["prompt"],
                 aspect_ratio=item["aspect_ratio"],
                 image_size=item.get("image_size", image_size),
@@ -684,8 +776,8 @@ def main() -> None:
         help="Model name. Default depends on backend."
     )
     parser.add_argument(
-        "--backend", "-b", default=None, choices=SUPPORTED_BACKENDS,
-        help="Override IMAGE_BACKEND env var."
+        "--backend", "-b", default=None,
+        help="Override IMAGE_BACKEND env var. Comma-separated for failover chain."
     )
     parser.add_argument(
         "--list-backends", action="store_true",
@@ -744,8 +836,9 @@ def main() -> None:
     if args.backend:
         os.environ["IMAGE_BACKEND"] = args.backend
 
-    backend, backend_name = _resolve_backend()
-    print(f"Using backend: {backend_name}\n")
+    backend_chain = _resolve_backend_chain()
+    chain_labels = ", ".join(name for _, name in backend_chain)
+    print(f"Using backend chain: {chain_labels}\n")
 
     if args.manifest:
         if not os.path.isfile(args.manifest):
@@ -760,7 +853,7 @@ def main() -> None:
         concurrency = _resolve_concurrency(args.concurrency)
         try:
             _, failed, _ = _run_manifest(
-                manifest, args.manifest, backend,
+                manifest, args.manifest, backend_chain,
                 initial_concurrency=concurrency,
                 image_size=args.image_size,
                 output_dir=args.output or str(Path(args.manifest).parent),
@@ -774,7 +867,8 @@ def main() -> None:
         sys.exit(1 if failed else 0)
 
     try:
-        backend.generate(
+        generate_with_fallback(
+            backend_chain,
             prompt=args.prompt,
             aspect_ratio=args.aspect_ratio,
             image_size=args.image_size,

@@ -98,3 +98,13 @@ python3 skills/ppt-master/scripts/svg_to_pptx.py <project_path>
 - `docs/rules/` — repo-wide style rules.
 - `examples/` — example projects.
 - `projects/` — user project workspace.
+
+## Story-format PPT conventions (竖屏短视频 9:16)
+
+When user asks for a "story" / "竖屏" / "抖音" format PPT (canvas `0 0 1080 1920`), apply these defaults:
+
+### Bottom chrome
+- Progress bar: y=1830, 6 segments, each w=150 h=3 gap=4px, margin-x=80. Active=`#9CAF88`, inactive=`#E5DFD2`
+- Logo: right-bottom at (824,1594), 216×216, `preserveAspectRatio="xMidYMid meet"`, file from `images/logo.png`
+- Content safe zone bottom: y ≤ 1780 (50px gap from progress bar)
+

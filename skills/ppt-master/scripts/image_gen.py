@@ -19,6 +19,9 @@ Backend selection (`IMAGE_BACKEND` in `.env` or the current process environment)
   IMAGE_BACKEND=fal         -> fal.ai backend
   IMAGE_BACKEND=replicate   -> Replicate backend
   IMAGE_BACKEND=openrouter  -> OpenRouter backend
+  IMAGE_BACKEND=stepfun     -> StepFun (阶跃星辰) backend
+  IMAGE_BACKEND=opencli-gemini  -> OpenCLI Gemini Web (browser, no API key)
+  IMAGE_BACKEND=opencli-chatgpt -> OpenCLI ChatGPT Web (browser, no API key)
 
 Configuration source (process env wins, `.env` is the fallback layer):
   1. Current process environment variables
@@ -75,6 +78,7 @@ IMAGE_ENV_PREFIXES = (
     "FAL_",
     "REPLICATE_",
     "OPENROUTER_",
+    "STEPFUN_",
 )
 DEPRECATED_IMAGE_KEYS = {
     "IMAGE_API_KEY",
@@ -201,6 +205,30 @@ BACKEND_REGISTRY = {
         "label": "OpenRouter",
         "default_model": "google/gemini-3.1-flash-image-preview",
         "key_hint": "OPENROUTER_API_KEY",
+    },
+    "opencli-gemini": {
+        "module": "backend_opencli_gemini",
+        "tier": "experimental",
+        "label": "OpenCLI Gemini Web",
+        "default_model": "",
+        "key_hint": "None (uses opencli browser automation)",
+        "aliases": ["gemini-web", "opencli"],
+    },
+    "opencli-chatgpt": {
+        "module": "backend_opencli_chatgpt",
+        "tier": "experimental",
+        "label": "OpenCLI ChatGPT Web",
+        "default_model": "",
+        "key_hint": "None (uses opencli browser automation)",
+        "aliases": ["chatgpt-web"],
+    },
+    "stepfun": {
+        "module": "backend_stepfun",
+        "tier": "core",
+        "label": "StepFun (阶跃星辰)",
+        "default_model": "step-image-edit-2",
+        "key_hint": "STEPFUN_API_KEY",
+        "aliases": ["step", "jystar"],
     },
 }
 

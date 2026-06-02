@@ -114,10 +114,11 @@ def load_prefixed_env_file(
     """
     Load matching keys from the first supported .env file.
 
-    Existing process environment variables always win. Keys outside the
-    requested prefixes are ignored so one shared .env can hold image, search,
-    and narration credentials without leaking unrelated values into the
-    process.
+    .env values always overwrite the process environment so stale or
+    corrupted shell variables cannot shadow correct .env values.  Keys
+    outside the requested prefixes are ignored so one shared .env can
+    hold image, search, and narration credentials without leaking
+    unrelated values into the process.
     """
     env_path = resolve_env_path()
     if not env_path.exists():
@@ -150,7 +151,7 @@ def load_prefixed_env_file(
                     f"{deprecated_keys[key]}"
                 )
             cleaned = strip_inline_env_comment(value).strip()
-            os.environ.setdefault(key, strip_env_quotes(cleaned))
+            os.environ[key] = strip_env_quotes(cleaned)
 
     return env_path
 

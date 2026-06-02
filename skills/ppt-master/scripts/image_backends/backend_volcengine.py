@@ -61,28 +61,28 @@ ASPECT_RATIO_SIZE_MAP = {
         "21:9": "2048x878",
     },
     "2K": {
-        "1:1": "2048x2048",
-        "2:3": "1536x2048",
-        "3:2": "2048x1536",
-        "3:4": "1536x2048",
-        "4:3": "2048x1536",
-        "4:5": "1638x2048",
-        "5:4": "2048x1638",
-        "9:16": "1152x2048",
-        "16:9": "2048x1152",
-        "21:9": "2048x878",
+        "1:1": "1920x1920",
+        "2:3": "1568x2352",
+        "3:2": "2352x1568",
+        "3:4": "1664x2219",
+        "4:3": "2219x1664",
+        "4:5": "1714x2143",
+        "5:4": "2143x1714",
+        "9:16": "1440x2560",
+        "16:9": "2560x1440",
+        "21:9": "3024x1296",
     },
     "4K": {
-        "1:1": "2048x2048",
-        "2:3": "1536x2048",
-        "3:2": "2048x1536",
-        "3:4": "1536x2048",
-        "4:3": "2048x1536",
-        "4:5": "1638x2048",
-        "5:4": "2048x1638",
-        "9:16": "1152x2048",
-        "16:9": "2048x1152",
-        "21:9": "2048x878",
+        "1:1": "1920x1920",
+        "2:3": "1568x2352",
+        "3:2": "2352x1568",
+        "3:4": "1664x2219",
+        "4:3": "2219x1664",
+        "4:5": "1714x2143",
+        "5:4": "2143x1714",
+        "9:16": "1440x2560",
+        "16:9": "2560x1440",
+        "21:9": "3024x1296",
     },
 }
 
@@ -95,16 +95,68 @@ def _resolve_url(base_url: str) -> str:
     return base + "/api/v1/images/generations"
 
 
+def _normalize_aspect_ratio(aspect_ratio: str) -> str:
+    """Map common custom ratios to supported Volcengine ratios."""
+    ratio_map = {
+        "1.5:1": "3:2",
+        "1.54:1": "16:9",
+        "1.6:1": "16:9",
+        "1.8:1": "9:5",
+        "2.0:1": "2:1",
+        "2.1:1": "21:10",
+        "2.16:1": "21:9",
+        "1.77:1": "16:9",
+        "6:5": "4:3",
+        "5:4": "4:3",
+        "5:3": "3:2",
+        "7:5": "3:2",
+        "8:5": "16:9",
+        "16:10": "16:9",
+        "3:1": "16:9",
+        "1:3": "9:16",
+        "2:1": "16:9",
+        "1:2": "9:16",
+    }
+    return ratio_map.get(aspect_ratio, aspect_ratio)
+
+def _check_min_pixels(size: str) -> bool:
+    """Check if size meets minimum 3,686,400 pixels requirement."""
+    min_pixels = 3686400
+    size_map = {
+        "512px": {"1024x1024": 1048576, "2048x878": 1798144},
+        "1K": {"1536x1536": 2359296, "2048x1152": 2359296, "2560x1440": 3686400, "3024x1296": 3919104},
+        "2K": {"1920x1920": 3686400, "2560x1440": 3686400, "3024x1296": 3919104},
+        "4K": {"1920x1920": 3686400, "2560x1440": 3686400, "3024x1296": 3919104},
+    }
+    for preset, resolutions in size_map.items():
+        for res, pixels in resolutions.items():
+            if size == res and pixels >= min_pixels:
+                return True
+    return False
+
 def _resolve_size(aspect_ratio: str, image_size: str) -> str:
     """Resolve the target resolution for a ratio and logical size preset."""
     normalized = normalize_image_size(image_size)
-    size = (ASPECT_RATIO_SIZE_MAP.get(normalized) or {}).get(aspect_ratio)
+    ratio = _normalize_aspect_ratio(aspect_ratio)
+    size = (ASPECT_RATIO_SIZE_MAP.get(normalized) or {}).get(ratio)
     if not size:
         supported = sorted(ASPECT_RATIO_SIZE_MAP["1K"])
         raise ValueError(
             f"Unsupported aspect ratio '{aspect_ratio}' for Volcengine backend. "
             f"Supported: {supported}"
         )
+
+    if not _check_min_pixels(size):
+        print(f"  [WARN] Size {size} ({normalized}) does not meet minimum pixel requirement. "
+              f"Upgrading to 2K equivalent for same ratio.")
+        size_2k = (ASPECT_RATIO_SIZE_MAP["2K"] or {}).get(ratio)
+        if size_2k:
+            return size_2k
+        else:
+            raise ValueError(
+                f"Cannot find valid 2K size for ratio '{ratio}'"
+            )
+
     return size
 
 

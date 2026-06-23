@@ -55,6 +55,13 @@ SVG_NS = "http://www.w3.org/2000/svg"
 RAMP_MIN_RATIO = 0.5
 RAMP_MAX_RATIO = 5.0
 
+# Modes / visual styles that legitimately use unbounded hero / poster type
+# (huge cover numerals, act dividers, single-number reveals). For these the
+# size-drift upper bound is dropped — the oversize is the design, not Executor
+# drift. The lower bound still applies.
+POSTER_SIZE_MODES = {'showcase'}
+POSTER_SIZE_STYLES = {'zine'}
+
 
 def _design_spec_is_brand(spec_path: Path) -> bool:
     """Return True when a design_spec.md frontmatter declares ``kind: brand``.
@@ -257,31 +264,34 @@ class SVGQualityChecker:
                 # 2. Check forbidden elements
                 self._check_forbidden_elements(content, result)
 
-                # 3. Check fonts
+                # 3. Check font-size values
+                self._check_font_size_values(content, result)
+
+                # 4. Check fonts
                 self._check_fonts(content, result)
 
-                # 4. Check width/height consistency with viewBox
+                # 5. Check width/height consistency with viewBox
                 self._check_dimensions(content, result)
 
-                # 5. Check text wrapping methods
+                # 6. Check text wrapping methods
                 self._check_text_elements(content, result)
 
-                # 6. Check image references (file existence and resolution)
+                # 7. Check image references (file existence and resolution)
                 self._check_image_references(content, svg_path, result)
 
-                # 7. Check object-level animation anchor quality.
+                # 8. Check object-level animation anchor quality.
                 self._check_animation_group_ids(content, result)
 
-                # 7b. Check <pattern> elements declare a PPTX preset.
+                # 8b. Check <pattern> elements declare a PPTX preset.
                 self._check_pattern_fills(content, result)
 
-                # 8. Check spec_lock drift (colors / font-family / font-size).
+                # 9. Check spec_lock drift (colors / font-family / font-size).
                 #    Templates do not ship a spec_lock.md, so skip in template
                 #    mode to avoid noise.
                 if not self.template_mode:
                     self._check_spec_lock_drift(content, svg_path, result)
 
-                # 9. Check web-sourced image attribution. Templates don't carry
+                # 10. Check web-sourced image attribution. Templates don't carry
                 #    image_sources.json; skip in template mode.
                 if not self.template_mode:
                     self._check_sourced_image_attribution(content, svg_path, result)
@@ -453,6 +463,31 @@ class SVGQualityChecker:
         if re.search(r'<image[^>]*\sopacity\s*=', content_lower):
             result['errors'].append("Detected forbidden <image opacity> (use overlay mask approach)")
 
+    def _check_font_size_values(self, content: str, result: Dict):
+        """Require font-size values to be unitless numeric SVG px values."""
+        numeric_re = re.compile(r'^(?:\d+(?:\.\d+)?|\.\d+)$')
+        bad_values = set()
+
+        for match in re.finditer(r'\bfont-size\s*=\s*(["\'])(.*?)\1', content, re.IGNORECASE):
+            raw = match.group(2).strip()
+            if not numeric_re.fullmatch(raw):
+                bad_values.add(raw)
+
+        for match in re.finditer(r'\bfont-size\s*:\s*([^;"\']+)', content, re.IGNORECASE):
+            raw = match.group(1).strip()
+            if not numeric_re.fullmatch(raw):
+                bad_values.add(raw)
+
+        if bad_values:
+            shown_values = sorted(bad_values)
+            shown = ', '.join(shown_values[:5])
+            more = len(shown_values) - 5
+            suffix = f" (+{more} more)" if more > 0 else ""
+            result['errors'].append(
+                f"font-size must be a unitless numeric px value; found {shown}{suffix}. "
+                "Write e.g. font-size=\"28\", never font-size=\"28px\" or \"21pt\"."
+            )
+
     def _check_fonts(self, content: str, result: Dict):
         """Check font usage.
 
@@ -473,6 +508,7 @@ class SVGQualityChecker:
         # this set survives the PPTX round-trip on any viewer machine.
         ppt_safe_tail = {
             'microsoft yahei', 'simhei', 'simsun', 'kaiti', 'fangsong',
+            'dengxian', 'microsoft jhenghei',
             'pingfang sc', 'heiti sc', 'songti sc', 'stsong',
             'arial', 'arial black', 'calibri', 'segoe ui', 'verdana',
             'helvetica', 'helvetica neue', 'tahoma', 'trebuchet ms',
@@ -726,6 +762,22 @@ class SVGQualityChecker:
                 allowed_colors.add(v.upper())
 
         typo = lock.get('typography', {})
+        numeric_size_re = re.compile(r'^(?:\d+(?:\.\d+)?|\.\d+)$')
+        invalid_lock_sizes = []
+        for k, v in typo.items():
+            if k == 'font_family' or k.endswith('_family'):
+                continue
+            if not numeric_size_re.fullmatch(v.strip()):
+                invalid_lock_sizes.append(f"{k}: {v}")
+        if invalid_lock_sizes:
+            shown = ', '.join(invalid_lock_sizes[:5])
+            more = len(invalid_lock_sizes) - 5
+            suffix = f" (+{more} more)" if more > 0 else ""
+            result['errors'].append(
+                f"spec_lock typography sizes must be unitless numeric px values; "
+                f"found {shown}{suffix}."
+            )
+
         # Font families: default `font_family` plus any per-role `*_family`
         # override (title_family / body_family / emphasis_family / code_family,
         # per spec_lock_reference.md). Any of these is a legitimate declared
@@ -734,7 +786,7 @@ class SVGQualityChecker:
         if typo:
             default_font = typo.get('font_family', '').strip()
             if default_font:
-                allowed_fonts.add(default_font)
+                allowed_fonts.add(self._normalize_font_stack(default_font))
             for k, v in typo.items():
                 if k == 'font_family' or not k.endswith('_family'):
                     continue
@@ -742,7 +794,7 @@ class SVGQualityChecker:
                 # Skip placeholder text like "same as body (omit if identical)"
                 if not v_clean or v_clean.lower().startswith('same as'):
                     continue
-                allowed_fonts.add(v_clean)
+                allowed_fonts.add(self._normalize_font_stack(v_clean))
 
         # Sizes: declared slots are anchors; body is the ramp baseline.
         allowed_sizes = set()
@@ -767,10 +819,18 @@ class SVGQualityChecker:
                     color_drifts.add(val)
 
         font_drifts = set()
-        for m in re.finditer(r'font-family\s*=\s*["\']([^"\']+)["\']', content):
-            val = m.group(1).strip()
-            if allowed_fonts and val not in allowed_fonts:
+        # Capture to the matching delimiter (group 1) so a double-quoted stack
+        # containing single-quoted family names is not truncated at the inner quote.
+        for m in re.finditer(r'font-family\s*=\s*(["\'])(.*?)\1', content):
+            val = m.group(2).strip()
+            if allowed_fonts and self._normalize_font_stack(val) not in allowed_fonts:
                 font_drifts.add(val)
+
+        # Poster / showcase contexts use unbounded hero type — drop the ceiling.
+        mode = (lock.get('mode', {}).get('mode') or '').strip().lower()
+        vstyle = (lock.get('visual_style', {}).get('visual_style') or '').strip().lower()
+        max_ratio = (float('inf') if mode in POSTER_SIZE_MODES or vstyle in POSTER_SIZE_STYLES
+                     else RAMP_MAX_RATIO)
 
         size_drifts = set()
         for m in re.finditer(r'font-size\s*=\s*["\']([^"\']+)["\']', content):
@@ -778,11 +838,11 @@ class SVGQualityChecker:
             if not allowed_sizes or val in allowed_sizes:
                 continue
             # Intermediate values are allowed when they sit inside the ramp
-            # envelope (ratio to body within [RAMP_MIN_RATIO, RAMP_MAX_RATIO]).
+            # envelope (ratio to body within [RAMP_MIN_RATIO, max_ratio]).
             if body_px and body_px > 0:
                 try:
                     ratio = float(val) / body_px
-                    if RAMP_MIN_RATIO <= ratio <= RAMP_MAX_RATIO:
+                    if RAMP_MIN_RATIO <= ratio <= max_ratio:
                         continue
                 except ValueError:
                     pass
@@ -877,13 +937,25 @@ class SVGQualityChecker:
 
     @staticmethod
     def _normalize_size(value: str) -> str:
-        """Normalize a font-size value for comparison: lowercase, strip spaces,
-        strip trailing 'px'. Other units (em / rem / %) are kept as-is so that
-        e.g. '1.5em' vs '24' stay distinct."""
+        """Normalize a font-size value for drift comparison.
+
+        Unit-bearing SVG values are reported as errors before drift checking.
+        The legacy `px` strip remains to avoid a duplicate drift warning after
+        the hard error has already identified the unit problem.
+        """
         v = value.strip().lower()
         if v.endswith('px'):
             v = v[:-2].strip()
         return v
+
+    @staticmethod
+    def _normalize_font_stack(stack: str) -> str:
+        """Normalize a font-family stack for comparison: split on commas, strip
+        quotes / whitespace, lowercase, rejoin. Collapses cosmetic differences
+        (comma spacing, single vs double quotes, case) so that
+        `Consolas,'Courier New',monospace` matches `Consolas, "Courier New", monospace`."""
+        parts = [p.strip().strip('"\'').lower() for p in stack.split(',')]
+        return ','.join(p for p in parts if p)
 
     def _categorize_issue(self, error_msg: str) -> str:
         """Categorize issue type"""

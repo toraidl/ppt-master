@@ -14,10 +14,10 @@ Supported models:
 
 import sys
 
-if __name__ == "__main__" and any(arg in {"-h", "--help", "help"} for arg in sys.argv[1:]):
+if __name__ == "__main__":
     print(__doc__)
     print("Use via: python3 skills/ppt-master/scripts/image_gen.py \"prompt\" --backend minimax")
-    raise SystemExit(0)
+    raise SystemExit(0 if any(arg in {"-h", "--help", "help"} for arg in sys.argv[1:]) else 1)
 
 import base64
 import os

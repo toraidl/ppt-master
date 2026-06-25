@@ -187,8 +187,8 @@ PPT Master runs in **any tool with agent capability** — read/write files, exec
 | Type | Examples | Notes |
 |---|---|---|
 | **IDE-native agent** | • VS Code architecture ([VS Code](https://code.visualstudio.com/) itself, plus forks & derivatives): [Cursor](https://cursor.sh/), Trae, Codebuddy IDE, [Windsurf](https://codeium.com/windsurf), Void, etc.<br>• Other architectures: [Zed](https://zed.dev/), etc. | Editor with a built-in agent |
-| **IDE plugin / extension** | [GitHub Copilot](https://github.com/features/copilot), [Claude Code](https://claude.ai/code) (VS Code / JetBrains extension), [Cline](https://cline.bot/), [Continue](https://continue.dev/), Roo Code, etc. | Installed inside hosts like VS Code or JetBrains |
-| **CLI agent** | [Claude Code](https://claude.ai/code) CLI, [Codex CLI](https://github.com/openai/codex), [Aider](https://aider.chat/), Gemini CLI, etc. | Runs in the terminal; suits scripting, remote, or server use |
+| **IDE plugin / extension** | [GitHub Copilot](https://github.com/features/copilot), [Claude Code](https://claude.ai/code) (VS Code / JetBrains extension), [OpenCode](https://opencode.ai/), [Cline](https://cline.bot/), [Continue](https://continue.dev/), Roo Code, etc. | Installed inside hosts like VS Code or JetBrains |
+| **CLI agent** | [Claude Code](https://claude.ai/code) CLI, [OpenCode](https://opencode.ai/) CLI, [Codex CLI](https://github.com/openai/codex), [Aider](https://aider.chat/), Gemini CLI, etc. | Runs in the terminal; suits scripting, remote, or server use |
 
 > **Model recommendation**: for the best results, use **Claude Opus** with `gpt-image-2`; **Gemini 3.5 Flash** currently offers great overall value for money — notably fast and well worth a try.
 
@@ -215,15 +215,19 @@ pip install -r requirements.txt
 
 To update later (Option A / B): `python3 skills/ppt-master/scripts/update_repo.py`
 
-> **Option C — Skill marketplace**: the repo ships `.claude-plugin/marketplace.json`, so it can be installed through the [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) ecosystem:
+> **Option C — Skill marketplace**: the repo ships `.claude-plugin/marketplace.json` and `.plugins/opencode/marketplace.json`, so it can be installed through the [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) or [OpenCode skill registry](https://opencode.ai/docs/skills) ecosystem:
 >
 > ```bash
-> # Cross-agent CLI (Claude Code, Cursor, Codex, etc.)
+> # Cross-agent CLI (Claude Code, OpenCode, Cursor, Codex, etc.)
 > npx skills add hugohe3/ppt-master
 >
 > # Or inside Claude Code
 > /plugin marketplace add hugohe3/ppt-master
 > /plugin install ppt-master@ppt-master
+>
+> # Or inside OpenCode
+> /skill add hugohe3/ppt-master
+> /skill install ppt-master
 > ```
 >
 > Both install paths above only fetch the skill files (not the full repo); you still need to `pip install -r requirements.txt` from the installed location for the post-processing scripts to run.

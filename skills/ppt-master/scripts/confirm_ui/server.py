@@ -460,7 +460,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     logger.info('running at %s', url)
     logger.info('project: %s', project_path)
     logger.info('idle timeout: %ds (0 = disabled)', args.timeout)
-    app.run(host='127.0.0.1', port=args.port, debug=False)
+    app.run(host='0.0.0.0', port=args.port, debug=False)
     return 0
 
 

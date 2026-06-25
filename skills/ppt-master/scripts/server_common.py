@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 
-def find_free_port(preferred: int, host: str = '127.0.0.1', span: int = 50) -> int:
+def find_free_port(preferred: int, host: str = '0.0.0.0', span: int = 50) -> int:
     """Return ``preferred`` if it is bindable, else the next free port within
     ``span``. Lets a new project's UI server coexist with another project's
     server already holding the default port, instead of crashing on bind — each

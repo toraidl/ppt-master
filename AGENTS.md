@@ -1,12 +1,23 @@
 # AGENTS.md
 
-This file is the project entry point for general AI agents.
+This file is the project entry point for general AI agents (Claude Code, OpenCode, Cursor, etc.).
 
 **You MUST read [`skills/ppt-master/SKILL.md`](skills/ppt-master/SKILL.md) before any PPT generation task or repo modification.** This repository exists to generate presentations; SKILL.md is the authoritative workflow that owns project creation, role switching, serial execution, quality gates, post-processing, export, and every per-step command. The rest of this file only points to where related material lives — it never substitutes for SKILL.md.
 
+## IDE-Specific Setup
+
+| IDE / Agent | Config File | Notes |
+|-------------|-------------|-------|
+| **Claude Code** | `.claude/settings.local.json` | Permissions already configured |
+| **OpenCode** | `.opencode/settings.json` | Permissions configured; skill loads automatically when `.opencode/` is present |
+| **Cursor** | Built-in agent | No extra config needed |
+| **VS Code + Copilot / Cline / Continue** | Extension-level | Follow extension docs |
+
+> **OpenCode users**: this repo is ready to use out of the box. The `.opencode/settings.json` grants the same tool permissions as the Claude Code config. SKILL.md is the canonical workflow — start there.
+
 ## Project Overview
 
-PPT Master is an AI-driven presentation generation system. Multi-role collaboration (Strategist → Image_Generator → Executor) converts source documents (PDF/DOCX/URL/Markdown) into natively editable PPTX with real PowerPoint shapes (DrawingML).
+PPT Master is an AI-driven presentation generation system. Multi-role collaboration (Strategist → Image_Generator → Executor) converts source documents (PDF/DOCX / URL / Markdown) into natively editable PPTX with real PowerPoint shapes (DrawingML).
 
 **Core Pipeline**: `Source Document → Create Project → [Template] → Strategist Eight Confirmations → [Image_Generator] → Executor Live Preview → Quality Check → Post-processing → Export PPTX`
 
@@ -75,6 +86,10 @@ python3 skills/ppt-master/scripts/confirm_ui/server.py <project_path> --daemon -
 
 # Image tools and SVG quality check
 python3 skills/ppt-master/scripts/analyze_images.py <project_path>/images
+# Formula rendering — manifest written by Strategist after typography confirmation:
+python3 skills/ppt-master/scripts/latex_render.py <project_path>
+python3 skills/ppt-master/scripts/latex_render.py <project_path> --dry-run
+python3 skills/ppt-master/scripts/latex_render.py <project_path> --providers codecogs,quicklatex,mathpad,wikimedia
 # In-pipeline AI image generation — manifest mode (required, even for 1 image):
 python3 skills/ppt-master/scripts/image_gen.py --manifest <project_path>/images/image_prompts.json
 python3 skills/ppt-master/scripts/image_gen.py --render-md <project_path>/images/image_prompts.json
@@ -104,3 +119,12 @@ python3 skills/ppt-master/scripts/svg_to_pptx.py <project_path>
 - `docs/rules/` — repo-wide style rules.
 - `examples/` — example projects.
 - `projects/` — user project workspace.
+
+## Story-format PPT conventions (竖屏短视频 9:16)
+
+When user asks for a "story" / "竖屏" / "抖音" format PPT (canvas `0 0 1080 1920`), apply these defaults:
+
+### Bottom chrome
+- Progress bar: y=1830, 6 segments, each w=150 h=3 gap=4px, margin-x=80. Active=`#9CAF88`, inactive=`#E5DFD2`
+- Logo: right-bottom at (824,1594), 216×216, `preserveAspectRatio="xMidYMid meet"`, file from `images/logo.png`
+- Content safe zone bottom: y ≤ 1780 (50px gap from progress bar)

@@ -2,6 +2,8 @@
 
 The short path to your first deck, how to use everything around it — templates, live preview, animations, narration, voice cloning — and where to look when something goes wrong. Sections follow roughly the order you meet them in a real run. Each is the quick version; follow the **Full guide →** link for depth.
 
+Works with any agent-capable IDE or CLI — Claude Code, OpenCode, Cursor, VS Code + Copilot, and more.
+
 - [Start from a template](#start-from-a-template)
 - [Generate your first deck](#generate-your-first-deck)
 - [Live preview & visual edits](#live-preview--visual-edits)

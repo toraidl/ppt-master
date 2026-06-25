@@ -84,6 +84,7 @@ IMAGE_ENV_PREFIXES = (
     "REPLICATE_",
     "OPENROUTER_",
     "STEPFUN_",
+    "AGNES_",
 )
 DEPRECATED_IMAGE_KEYS = {
     "IMAGE_API_KEY",
@@ -234,6 +235,13 @@ BACKEND_REGISTRY = {
         "default_model": "step-image-edit-2",
         "key_hint": "STEPFUN_API_KEY",
         "aliases": ["step", "jystar"],
+    },
+    "agnes": {
+        "module": "backend_agnes",
+        "tier": "core",
+        "label": "Agnes Image 2.1 Flash",
+        "default_model": "agnes-image-2.1-flash",
+        "key_hint": "AGNES_API_KEY",
     },
 }
 

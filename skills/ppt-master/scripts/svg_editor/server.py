@@ -820,6 +820,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument('project_dir', help='Path to project directory (contains svg_output/)')
     parser.add_argument('--port', type=int, default=5050, help='Port to listen on (default: 5050)')
+    parser.add_argument('--host', type=str, default='0.0.0.0', help='Host to bind (default: 0.0.0.0 — LAN accessible)')
     parser.add_argument('--no-browser', action='store_true', help='Do not auto-open browser')
     parser.add_argument(
         '--live',
@@ -909,7 +910,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         lock_file=lock_file,
     )
 
-    url = f'http://localhost:{port}'
+    display_host = '0.0.0.0' if args.host == '0.0.0.0' else args.host
+    url = f'http://{display_host}:{port}'
     if not args.no_browser:
         webbrowser.open(url)
 
@@ -919,7 +921,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     logger.info('project: %s', project_path)
     logger.info('svg_output: %s (%d slides)', svg_output, svg_count)
     logger.info('idle timeout: %ds (0 = disabled)', idle_timeout)
-    app.run(host='127.0.0.1', port=port, debug=False)
+    app.run(host=args.host, port=port, debug=False)
     return 0
 
 
